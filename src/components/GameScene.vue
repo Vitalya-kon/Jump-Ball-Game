@@ -15,12 +15,11 @@ let restartButton: Phaser.GameObjects.Text | null = null;
 let isGameActive = true;
 let platforms: Phaser.Physics.Arcade.StaticGroup | null = null;
 let player: Phaser.Physics.Arcade.Sprite | null = null;
-let cursors: Phaser.Types.Input.Keyboard.CursorKeys | null = null;
-let spaceKey: Phaser.Input.Keyboard.Key | null = null;
+let cursors: Phaser.Types.Input.Keyboard.CursorKeys | null | undefined = null;
+let spaceKey: Phaser.Input.Keyboard.Key | null | undefined = null;
 let lastPlatformX = 100;
 let lastPlatformY = 600;
 let worldWidth = 0; // 🔥 Будем расширять мир динамически
-let wasInAir = false; // 🔥 Отслеживаем, был ли игрок в воздухе
 let isJumping = false;
 
 const config: Phaser.Types.Core.GameConfig = {
@@ -36,7 +35,7 @@ const config: Phaser.Types.Core.GameConfig = {
   physics: {
     default: 'arcade',
     arcade: {
-      gravity: { y: 400 },
+      gravity: { x: 0, y: 400 },
       debug: false
     }
   },
@@ -59,7 +58,7 @@ function create(this: Phaser.Scene) {
   worldWidth = 10000; // 🔥 Начальная ширина мира
 
   // 🔥 Создаем бесконечный фон с параллакс-эффектом
-  const bg = this.add.tileSprite(0, 0, worldWidth, canvasHeight, 'background')
+  this.add.tileSprite(0, 0, worldWidth, canvasHeight, 'background')
     .setOrigin(0, 0)
     .setScrollFactor(0, 1); // Фон не двигается по горизонтали
 
@@ -85,15 +84,14 @@ function create(this: Phaser.Scene) {
   this.cameras.main.startFollow(player, true, 0.1, 0.1);
   this.cameras.main.setBounds(0, 0, worldWidth, canvasHeight);
 
-  cursors = this.input.keyboard.createCursorKeys();
-  spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+  cursors = this.input.keyboard?.createCursorKeys();
+  spaceKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
   scoreText = this.add.text(20, 20, 'Score: 0', {
     fontSize: '24px',
     color: '#fff',
     backgroundColor: 'rgba(0,0,0,0.5)',
-    padding: { x: 10, y: 5 },
-    borderRadius: 5
+    padding: { x: 10, y: 5 }
   }).setScrollFactor(0);
 
   lastPlatformY = canvasHeight - 100;
@@ -165,7 +163,7 @@ function update(this: Phaser.Scene) {
     player.setVelocityX(0);
   }
 
-  const onGround = player.body.touching.down || player.body.blocked.down;
+  const onGround = player.body?.touching.down || player.body?.blocked.down;
 
   
 
@@ -252,7 +250,9 @@ function restartGame(scene: Phaser.Scene) {
 
   scene.cameras.main.stopFollow();
   scene.cameras.main.setScroll(0, 0);
-  scene.cameras.main.startFollow(player, true, 0.1, 0.1);
+  if (player) {
+    scene.cameras.main.startFollow(player, true, 0.1, 0.1);
+  }
 
   platforms?.clear(true, true);
 
