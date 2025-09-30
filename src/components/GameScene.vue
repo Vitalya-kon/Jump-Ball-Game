@@ -24,6 +24,7 @@ let lastPlatformY = 600;
 let worldWidth = 0;
 let isJumping = false;
 let sceneRef: Phaser.Scene | null = null; // 🔥 Сохраняем ссылку на сцену
+let coins: Phaser.Physics.Arcade.Group | null = null; // 🔥 Группа монеток
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -55,6 +56,11 @@ function preload(this: Phaser.Scene) {
   this.load.image('playerFall', '/assets/images/Ball/Jump/2.png');
   this.load.image('platform', '/assets/images/Platform/brown platform merged transparent.png');
   this.load.image('controls', '/assets/images/keyControl/keyControl.png');
+  this.load.image('coin_pos_1', '/assets/images/Coin/gold_1.png');
+  this.load.image('coin_pos_2', '/assets/images/Coin/gold_2.png');
+  this.load.image('coin_pos_3', '/assets/images/Coin/gold_3.png');
+  this.load.image('coin_pos_4', '/assets/images/Coin/gold_4.png');
+  this.load.image('+1', '/assets/images/Coin/+1.png');
 
   this.load.on('fileerror', (key: string, file: any) => {
     console.error(`Ошибка загрузки ресурса: ${key}`, file);
@@ -69,6 +75,7 @@ function create(this: Phaser.Scene) {
   sceneRef = this; // 🔥 Сохраняем ссылку на сцену
   const canvasHeight = this.sys.canvas.height;
   worldWidth = 10000;
+  score = 0; // Сбрасываем счет при старте игры
 
   this.add.tileSprite(0, 0, worldWidth, canvasHeight, 'background')
     .setOrigin(0, 0)
@@ -99,6 +106,9 @@ function create(this: Phaser.Scene) {
   cursors = this.input.keyboard?.createCursorKeys();
   spaceKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
+  
+
+    // 🔥 Убираем старый расчет счета из update
   scoreText = this.add.text(20, 20, 'Score: 0', {
     fontSize: '24px',
     color: '#fff',
@@ -133,10 +143,62 @@ function create(this: Phaser.Scene) {
     ).setScrollFactor(0);
   }
 
+  coins = this.physics.add.group({
+    allowGravity: false,
+    immovable: true
+  });
+  // 🔥 Добавляем создание анимации для монеток
+  this.anims.create({
+    key: 'coinSpin',
+    frames: [
+      { key: 'coin_pos_1' },
+      { key: 'coin_pos_2' },
+      { key: 'coin_pos_3' },
+      { key: 'coin_pos_4' }
+    ],
+    frameRate: 5,
+    repeat: -1
+  });
+
+  // 🔥 Основная коллизия для монеток (делаем один раз в create)
+  this.physics.add.overlap(player, coins, (_obj1, obj2) => {
+    const coin = obj2 as Phaser.Physics.Arcade.Sprite;
+    coin.destroy();
+    score += 1;
+    scoreText?.setText(`Score: ${score}`);
+
+    // 🔥 Новый эффект: создаем "+1"
+    createPlusOneEffect(coin.x, coin.y);
+  });
+
+  
+
   lastPlatformY = canvasHeight - 100;
   createInitialPlatforms(this);
 
   hideGameOverUI();
+}
+
+// 🔥 Новая функция для эффекта "+1"
+function createPlusOneEffect(x: number, y: number) {
+  if (!sceneRef) return;
+  
+  // Создаем спрайт "+1"
+  const plusOne = sceneRef.add.sprite(x, y, '+1');
+  plusOne.setDepth(300);
+  plusOne.setScale(0.8);
+  
+  // Анимируем появление и движение
+  sceneRef.tweens.add({
+    targets: plusOne,
+    y: y - 70, // Двигаем вверх
+    alpha: 0,  // Исчезаем
+    duration: 2000,
+    ease: 'Power2',
+    onComplete: () => {
+      plusOne.destroy(); // Удаляем после анимации
+    }
+  });
 }
 
 function createInitialPlatforms(scene: Phaser.Scene) {
@@ -179,6 +241,34 @@ function createNextPlatform(scene: Phaser.Scene) {
   platform?.setScale(0.5 + Math.random() * 0.4);
   platform?.setDepth(1);
   platform?.refreshBody();
+
+  // 🔥 Добавляем монетки на платформу (с 30% вероятностью)
+  const shouldAddCoins = Phaser.Math.Between(1, 6) <= 3;
+  if (shouldAddCoins) {
+    const coinCount = Phaser.Math.Between(1, 3);
+    const platformWidth = platform.width * platform.scaleX;
+    const coinSpacing = platformWidth / (coinCount + 1);
+    const platformHeight = platform.height * platform.scaleY;
+
+    // 🔥 Используем глобальную группу монеток
+
+    for (let i = 0; i < coinCount; i++) {
+      const coinX = platform.x - platformWidth / 2 + (i + 1) * coinSpacing;
+      const coinY = platform.y - platformHeight / 2 - 30;
+
+      // 🔥 Создаем монетку через группу
+      const coin = coins?.create(coinX, coinY, 'coin_pos_1');
+      coin?.setImmovable(true); // Важно! Монетка не падает
+      coin?.setOrigin(0.5, 0.5);
+      coin?.setScale(0.8);
+      coin?.setDepth(200);
+      
+      // Запускаем анимацию
+      coin?.anims.play('coinSpin');
+      
+      // 🔥 Коллизия обрабатывается в основной overlap в create()
+    }
+  }
 
   lastPlatformX = newX;
   lastPlatformY = newY;
@@ -235,10 +325,10 @@ function update(this: Phaser.Scene) {
     createNextPlatform(this);
   }
 
-  if (isGameActive) {
-    score = Math.floor(player.x / 10);
-    scoreText?.setText(`Score: ${score}`);
-  }
+  // if (isGameActive) {
+  //   score = Math.floor(player.x / 10);
+  //   scoreText?.setText(`Score: ${score}`);
+  // }
 
   const bg = this.children.getByName('background') as Phaser.GameObjects.TileSprite;
   if (bg && player.x > 400) {
@@ -329,6 +419,13 @@ function hideGameOverUI() {
 
 function restartGame(scene: Phaser.Scene) {
   console.log('[restartGame] Перезапуск игры');
+
+  // Очищаем все временные элементы
+  scene.children.each(child => {
+    if (child instanceof Phaser.GameObjects.Sprite && child.texture.key === '+1') {
+      child.destroy();
+    }
+  });
   
   hideGameOverUI();
   isGameActive = true;
@@ -338,6 +435,20 @@ function restartGame(scene: Phaser.Scene) {
   if (player) {
     player.destroy();
   }
+
+  // 🔥 Очищаем монетки при рестарте
+  coins?.clear(true, true);
+
+  // Обновляем текст счета
+  if (scoreText) {
+    scoreText.destroy();
+  }
+  scoreText = scene.add.text(20, 20, 'Score: 0', {
+    fontSize: '24px',
+    color: '#fff',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: { x: 10, y: 5 }
+  }).setScrollFactor(0);
 
   player = scene.physics.add.sprite(150, 350, 'player');
   player.setBounce(0.5);
