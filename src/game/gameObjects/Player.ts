@@ -6,6 +6,7 @@ export class Player {
   private spaceKey: Phaser.Input.Keyboard.Key | null = null;
   private isJumping = false;
   private scene: Phaser.Scene;
+  private lastOnGroundTime = 0;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -45,7 +46,20 @@ export class Player {
 
     // Прыжок
     const onGround = this.sprite.body?.touching.down || this.sprite.body?.blocked.down;
-    if (Phaser.Input.Keyboard.JustDown(this.spaceKey) && onGround) {
+    const currentTime = this.scene.time.now;
+    
+    // Отслеживаем момент последнего нахождения на земле
+    if (onGround) {
+      this.lastOnGroundTime = currentTime;
+    }
+    
+    // Разрешаем прыжок если:
+    // 1. Игрок на земле сейчас
+    // 2. Или недавно был на земле (в течение 200мс после отскока)
+    const timeSinceLastGround = currentTime - this.lastOnGroundTime;
+    const canJump = onGround || (timeSinceLastGround < 200);
+    
+    if (Phaser.Input.Keyboard.JustDown(this.spaceKey) && canJump) {
       this.sprite.setVelocityY(-400);
       this.isJumping = true;
       this.sprite.setTexture('playerJump');

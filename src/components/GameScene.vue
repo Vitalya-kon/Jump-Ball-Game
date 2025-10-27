@@ -10,8 +10,10 @@ import Phaser from 'phaser';
 import { Player } from '../game/gameObjects/Player';
 import { PlatformManager } from '../game/gameObjects/PlatformManager';
 import { CoinManager } from '../game/gameObjects/CoinManager';
+import { EnemyManager } from '../game/gameObjects/EnemyManager';
 import { GameUI } from '../game/ui/GameUI';
 import { GameOverUI } from '../game/ui/GameOverUI';
+import { MobileControls } from '../game/ui/MobileControls';
 
 const gameContainer = ref<HTMLElement | null>(null);
 let game: Phaser.Game | null = null;
@@ -21,8 +23,10 @@ let isGameActive = true;
 let player: Player | null = null;
 let platformManager: PlatformManager | null = null;
 let coinManager: CoinManager | null = null;
+let enemyManager: EnemyManager | null = null;
 let gameUI: GameUI | null = null;
 let gameOverUI: GameOverUI | null = null;
+let mobileControls: MobileControls | null = null;
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -58,6 +62,8 @@ function preload(this: Phaser.Scene) {
   this.load.image('coin_pos_2', '/assets/images/Coin/gold_2.png');
   this.load.image('coin_pos_3', '/assets/images/Coin/gold_3.png');
   this.load.image('coin_pos_4', '/assets/images/Coin/gold_4.png');
+  this.load.image('enemies_walk_pos_1', '/assets/images/Еnemies/spikeMan_walk1.png');
+  this.load.image('enemies_walk_pos_2', '/assets/images/Еnemies/spikeMan_walk2.png');
   this.load.image('+1', '/assets/images/Coin/+1.png');
 
   this.load.on('fileerror', (key: string, file: any) => {
@@ -117,6 +123,58 @@ function create(this: Phaser.Scene) {
     coinManager?.addCoinsToPlatform(platform);
   });
 
+  // Создаем менеджер врагов с обработчиком проигрыша
+  enemyManager = new EnemyManager(this, () => {
+    endGame();
+  });
+  enemyManager.create();
+  enemyManager.setupCollision(playerSprite);
+
+  // Добавляем врагов на начальные платформы
+  initialPlatforms.forEach(platform => {
+    enemyManager?.addEnemyToPlatform(platform);
+  });
+
+  // Создаем мобильное управление
+  mobileControls = new MobileControls(this,
+    () => {
+      // Нажатие влево
+      if (player && player.getSprite()) {
+        player.getSprite()?.setVelocityX(-150);
+        player.getSprite()?.setFlipX(true);
+      }
+    },
+    () => {
+      // Нажатие вправо
+      if (player && player.getSprite()) {
+        player.getSprite()?.setVelocityX(150);
+        player.getSprite()?.setFlipX(false);
+      }
+    },
+    () => {
+      // Нажатие прыжка
+      if (player && player.getSprite()) {
+        const playerSprite = player.getSprite();
+        if (playerSprite && playerSprite.body) {
+          const onGround = playerSprite.body.touching.down || playerSprite.body.blocked.down;
+          const currentTime = this.time.now;
+          if (onGround || (currentTime - player['lastOnGroundTime']) < 200) {
+            playerSprite.setVelocityY(-400);
+            player['isJumping'] = true;
+            playerSprite.setTexture('playerJump');
+            this.tweens.add({
+              targets: playerSprite,
+              scale: { from: 1.95, to: 2.1 },
+              duration: 100,
+              yoyo: true
+            });
+          }
+        }
+      }
+    }
+  );
+  mobileControls.create();
+
   // Создаем UI завершения игры
   gameOverUI = new GameOverUI(this, () => {
     restartGame(this);
@@ -128,6 +186,12 @@ function create(this: Phaser.Scene) {
     this.physics.add.collider(playerSprite, platforms, () => {
       player?.onPlatformCollision();
     });
+    
+    // Добавляем коллизии врагов с платформами
+    const enemies = enemyManager?.getEnemies();
+    if (enemies && platforms) {
+      this.physics.add.collider(enemies, platforms);
+    }
   }
 
   hideGameOverUI();
@@ -139,6 +203,21 @@ function update(this: Phaser.Scene) {
 
   const playerSprite = player.getSprite();
   if (!playerSprite) return;
+
+  // Обновляем мобильное управление
+  if (mobileControls?.isLeftButtonPressed()) {
+    playerSprite.setVelocityX(-150);
+    playerSprite.setFlipX(true);
+  } else if (mobileControls?.isRightButtonPressed()) {
+    playerSprite.setVelocityX(150);
+    playerSprite.setFlipX(false);
+  } else if (playerSprite.body && !playerSprite.body.touching.down && !playerSprite.body.blocked.down) {
+    // Только если не двигается кнопками
+    const speed = playerSprite.body.velocity.x;
+    if (Math.abs(speed) > 0) {
+      playerSprite.setVelocityX(speed * 0.9); // Затухание
+    }
+  }
 
   // Обновляем игрока
   player.update();
@@ -163,7 +242,13 @@ function update(this: Phaser.Scene) {
     if (newPlatform && coinManager) {
       coinManager.addCoinsToPlatform(newPlatform);
     }
+    if (newPlatform && enemyManager) {
+      enemyManager.addEnemyToPlatform(newPlatform);
+    }
   }
+
+  // Обновляем врагов
+  enemyManager?.update();
 
   // Фон остается статичным
 }
@@ -214,6 +299,9 @@ function restartGame(scene: Phaser.Scene) {
   coinManager?.clearCoins();
   coinManager?.resetScore();
 
+  // Очищаем врагов
+  enemyManager?.clearEnemies();
+
   // Пересоздаем UI счета
   gameUI?.recreate();
 
@@ -237,6 +325,11 @@ function restartGame(scene: Phaser.Scene) {
     coinManager?.addCoinsToPlatform(platform);
   });
 
+  // Добавляем врагов на начальные платформы
+  initialPlatforms.forEach(platform => {
+    enemyManager?.addEnemyToPlatform(platform);
+  });
+
   // Пересоздаем коллизии
   if (player) {
     const playerSprite = player.getSprite();
@@ -245,6 +338,18 @@ function restartGame(scene: Phaser.Scene) {
       scene.physics.add.collider(playerSprite, platforms, () => {
         player?.onPlatformCollision();
       });
+      
+      // Добавляем коллизии врагов с платформами
+      const enemies = enemyManager?.getEnemies();
+      if (enemies && platforms) {
+        scene.physics.add.collider(enemies, platforms);
+      }
+      
+      // Пересоздаем коллизии для монеток
+      coinManager?.setupCollision(playerSprite);
+      
+      // Пересоздаем коллизии для врагов
+      enemyManager?.setupCollision(playerSprite);
     }
   }
 
@@ -282,8 +387,10 @@ onUnmounted(() => {
   player?.destroy();
   platformManager = null;
   coinManager?.destroy();
+  enemyManager?.destroy();
   gameUI?.destroy();
   gameOverUI?.destroy();
+  mobileControls?.destroy();
 });
 </script>
 
@@ -294,5 +401,12 @@ onUnmounted(() => {
   overflow: hidden;
   background-color: black;
   touch-action: none;
+}
+
+/* Отключаем выделение текста на мобильных для предотвращения "зоопарка" */
+.game-container * {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 </style>
