@@ -16,7 +16,6 @@ import { GameOverUI } from '../game/ui/GameOverUI';
 const gameContainer = ref<HTMLElement | null>(null);
 let game: Phaser.Game | null = null;
 let isGameActive = true;
-let sceneRef: Phaser.Scene | null = null;
 
 // Компоненты игры
 let player: Player | null = null;
@@ -71,7 +70,6 @@ function preload(this: Phaser.Scene) {
 }
 
 function create(this: Phaser.Scene) {
-  sceneRef = this;
   const canvasHeight = this.sys.canvas.height;
   const canvasWidth = this.sys.canvas.width;
 
@@ -285,9 +283,7 @@ onUnmounted(() => {
   platformManager = null;
   coinManager?.destroy();
   gameUI?.destroy();
-  gameOverUI?.destroy();  
-  
-  sceneRef = null;
+  gameOverUI?.destroy();
 });
 </script>
 

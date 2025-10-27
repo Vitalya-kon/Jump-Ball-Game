@@ -1,15 +1,15 @@
 import Phaser from 'phaser';
 import { createScoreDisplay } from '../ui/ScoreDisplay';
-import { createGameOverUI } from '../ui/GameOverUI';
+import { GameOverUI } from '../ui/GameOverUI';
 import { createPlatformGenerator } from '../gameObjects/PlatformGenerator';
-import { createCoinManager } from '../gameObjects/CoinManager';
+import { CoinManager } from '../gameObjects/CoinManager';
 import { resetGamePhysics } from '../utils/GameUtils';
 
 export function createLevelScene() {
   let scoreDisplay: ReturnType<typeof createScoreDisplay>;
-  let gameOverUI: ReturnType<typeof createGameOverUI>;
+  let gameOverUI: GameOverUI;
   let platformGenerator: ReturnType<typeof createPlatformGenerator>;
-  let coinManager: ReturnType<typeof createCoinManager>;
+  let coinManager: CoinManager;
   let player: Phaser.Physics.Arcade.Sprite | null = null;
   let cursors: Phaser.Types.Input.Keyboard.CursorKeys | null | undefined = null;
   let spaceKey: Phaser.Input.Keyboard.Key | null | undefined = null;
@@ -35,11 +35,11 @@ export function createLevelScene() {
 
     create(this: Phaser.Scene) {
       scoreDisplay = createScoreDisplay(this);
-      gameOverUI = createGameOverUI(this);
+      gameOverUI = new GameOverUI(this);
       platformGenerator = createPlatformGenerator(this);
       
       setupPlayer.call(this);
-      coinManager = createCoinManager(this, scoreDisplay, player!);
+      coinManager = new CoinManager(this, (score) => scoreDisplay.update(score));
       
       platformGenerator.createInitialPlatforms();
       setupControls.call(this);
@@ -56,7 +56,8 @@ export function createLevelScene() {
     restartGame() {
       scoreDisplay.reset();
       gameOverUI.hide();
-      coinManager.reset();
+      coinManager.clearCoins();
+      coinManager.resetScore();
       platformGenerator.reset();
       player?.setPosition(150, 350);
       player?.setVelocity(0, 0);
